@@ -18,7 +18,9 @@ STATUSES = ["已记录", "已分析", "已处理", "已归档"]
 
 @router.get("", response_model=PageResult[dict])
 def list_entries(
-    keyword: str | None = Query(default=None, description="按记录编号检索"),
+    keyword: str | None = Query(default=None, description="按记录编号或流作业名检索"),
+    记录编号: str | None = Query(default=None, description="按记录编号检索"),
+    流作业名: str | None = Query(default=None, description="按流作业名检索"),
     status: str | None = Query(default=None, description="已记录、已分析、已处理、已归档"),
     page: int = 1,
     size: int = 20,
@@ -26,9 +28,31 @@ def list_entries(
     """按记录编号与状态过滤流处理日志中心列表；没有数据时返回空页，不报错。"""
     if size > 200:
         raise HTTPException(status_code=400, detail="每页最多 200 条，请缩小分页范围")
-    items, total = service.list_entries(keyword=keyword, status=status, page=page, size=size)
+    items, total = service.list_entries(
+        keyword=keyword,
+        status=status,
+        record_code=记录编号,
+        job_name=流作业名,
+        page=page,
+        size=size,
+    )
     return PageResult(items=items, total=total, page=page, size=size)
 
+
+@router.get("/export")
+def export_entries() -> dict[str, Any]:
+    """导出流处理日志中心清单：返回当前过滤条件下的全量数据。"""
+    items, total = service.list_entries(page=1, size=10000)
+    return {"module": "log", "total": total, "items": items}
+
+
+@router.get("/{entry_id}/result", response_model=dict)
+def get_result(entry_id: int) -> dict:
+    """日志处理数据结果：保留原始日志、处理状态与异常计数，供列表和详情侧栏共用。"""
+    entry = service.get_entry(entry_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail=f"日志记录 {entry_id} 不存在或已归档")
+    return entry
 
 @router.get("/{entry_id}", response_model=dict)
 def get_entry(entry_id: int) -> dict:
@@ -56,10 +80,3 @@ def run_action(entry_id: int, payload: EntryPayload) -> ActionResult:
     if entry is None:
         return ActionResult(ok=False, message=message)
     return ActionResult(ok=True, message=message, entry=entry)
-
-
-@router.get("/export")
-def export_entries() -> dict[str, Any]:
-    """导出流处理日志中心清单：返回当前过滤条件下的全量数据。"""
-    items, total = service.list_entries(page=1, size=10000)
-    return {"module": "log", "total": total, "items": items}

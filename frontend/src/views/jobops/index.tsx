@@ -73,10 +73,11 @@ export default function JobopsView() {
     try {
       const response = await request(`${ENDPOINT}/${row.id}/actions`, {
         method: 'POST',
-        body: JSON.stringify({ action }),
+        body: JSON.stringify({ values: { action } }),
       })
-      if (!response.ok) {
-        throw new Error('流作业运维动作未生效，请稍后重试')
+      const body = await response.json().catch(() => ({}))
+      if (!response.ok || body.ok === false) {
+        throw new Error(body.message ?? body.detail ?? '流作业运维动作未生效，请稍后重试')
       }
       await reload()
     } catch (error) {
